@@ -73,6 +73,8 @@
             <input type="hidden" name="scale" :value="scale">
             <input type="hidden" name="x" :value="Math.round(x)">
             <input type="hidden" name="y" :value="Math.round(y)">
+            <input type="hidden" name="preview_width" :value="Math.round(backgroundRenderedWidth || 0)">
+            <input type="hidden" name="preview_height" :value="Math.round(backgroundRenderedHeight || 0)">
 
             <button
                 type="submit"
@@ -126,6 +128,8 @@
             dragStartY: 0,
             originX: 0,
             originY: 0,
+            backgroundRenderedWidth: 0,
+            backgroundRenderedHeight: 0,
             loadPhoto(event) {
                 const file = event.target.files[0];
 
@@ -165,8 +169,9 @@
             stopDrag() {
                 this.dragging = false;
             },
-            setBackgroundSize() {
-                // Reserved for future ratio helpers.
+            setBackgroundSize(event) {
+                this.backgroundRenderedWidth = event.target.clientWidth || 0;
+                this.backgroundRenderedHeight = event.target.clientHeight || 0;
             },
         };
     }

@@ -26,6 +26,8 @@ class GenerateFrameRequest extends FormRequest
             'x' => ['required', 'integer', 'between:-5000,5000'],
             'y' => ['required', 'integer', 'between:-5000,5000'],
             'scale' => ['required', 'numeric', 'between:0.1,4'],
+            'preview_width' => ['nullable', 'numeric', 'between:1,10000'],
+            'preview_height' => ['nullable', 'numeric', 'between:1,10000'],
         ];
     }
 }

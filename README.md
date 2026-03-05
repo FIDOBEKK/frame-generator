@@ -11,6 +11,7 @@ A Laravel MVP for generating a LinkedIn-ready framed profile image.
 - Admin-only login for managing one background image
 - Single background setting stored in database (`app_settings` table)
 - Server-side image compositing with PHP GD
+- Optional AI background removal for uploaded person photo (Python `rembg` script)
 - Upload validation (type, size, transform values)
 - Privacy cleanup:
   - Temporary uploaded user photo is deleted after generation
@@ -43,20 +44,28 @@ composer install
 npm install
 ```
 
-2. Environment + app key
+2. (Optional but recommended) Install background removal dependency
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install rembg
+```
+
+3. Environment + app key
 
 ```bash
 cp .env.example .env
 php artisan key:generate
 ```
 
-3. Database + seed
+4. Database + seed
 
 ```bash
 php artisan migrate --seed
 ```
 
-4. Build assets (or run dev server)
+5. Build assets (or run dev server)
 
 ```bash
 npm run build
@@ -64,7 +73,7 @@ npm run build
 npm run dev
 ```
 
-5. Start app
+6. Start app
 
 ```bash
 php artisan serve
@@ -93,8 +102,21 @@ Run only frame generation tests:
 php artisan test --filter=FrameGenerationTest --compact
 ```
 
+## Environment options (background removal)
+
+You can customize/remotely disable background removal:
+
+```env
+FRAME_GENERATOR_BG_REMOVAL_ENABLED=true
+FRAME_GENERATOR_PYTHON_BIN=.venv/bin/python
+FRAME_GENERATOR_BG_REMOVAL_TIMEOUT=60
+```
+
+If `rembg` is unavailable or the script fails, the app gracefully falls back to compositing the original uploaded photo.
+
 ## Notes
 
 - Generated JPG dimensions match the background image dimensions.
+- Preview coordinates are mapped from on-screen preview size to actual background pixel size.
 - Background preview is served from local storage via route.
 - Registration is disabled to keep auth admin-focused for this MVP.

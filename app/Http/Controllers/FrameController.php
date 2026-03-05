@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\Process\Process;
 use Throwable;
 
 class FrameController extends Controller
@@ -36,21 +37,33 @@ class FrameController extends Controller
 
         $uploadPath = $request->file('photo')->store('tmp/uploads', 'local');
         $outputPath = 'tmp/generated/'.Str::uuid().'.jpg';
+        $preparedUserImagePath = null;
         $backgroundImage = null;
         $userImage = null;
 
         try {
             $backgroundImage = $this->createImageResource(Storage::disk('local')->path($backgroundPath));
-            $userImage = $this->createImageResource(Storage::disk('local')->path($uploadPath));
 
-            $x = (int) $request->integer('x');
-            $y = (int) $request->integer('y');
+            $preparedUserImagePath = $this->removeBackgroundIfConfigured($uploadPath);
+            $userImage = $this->createImageResource(Storage::disk('local')->path($preparedUserImagePath ?? $uploadPath));
+
+            $backgroundWidth = imagesx($backgroundImage);
+            $backgroundHeight = imagesy($backgroundImage);
+
+            $previewWidth = (float) ($request->input('preview_width') ?: $backgroundWidth);
+            $previewHeight = (float) ($request->input('preview_height') ?: $backgroundHeight);
+
+            $ratioX = $backgroundWidth / max(1, $previewWidth);
+            $ratioY = $backgroundHeight / max(1, $previewHeight);
+
+            $x = (int) round($request->integer('x') * $ratioX);
+            $y = (int) round($request->integer('y') * $ratioY);
             $scale = (float) $request->input('scale');
 
             $userWidth = imagesx($userImage);
             $userHeight = imagesy($userImage);
-            $targetWidth = max(1, (int) round($userWidth * $scale));
-            $targetHeight = max(1, (int) round($userHeight * $scale));
+            $targetWidth = max(1, (int) round($userWidth * $scale * $ratioX));
+            $targetHeight = max(1, (int) round($userHeight * $scale * $ratioY));
 
             imagecopyresampled(
                 $backgroundImage,
@@ -92,6 +105,10 @@ class FrameController extends Controller
             }
 
             Storage::disk('local')->delete($uploadPath);
+
+            if ($preparedUserImagePath !== null) {
+                Storage::disk('local')->delete($preparedUserImagePath);
+            }
         }
     }
 
@@ -105,6 +122,50 @@ class FrameController extends Controller
         );
 
         return response()->file(Storage::disk('local')->path($backgroundPath));
+    }
+
+    private function removeBackgroundIfConfigured(string $uploadPath): ?string
+    {
+        if (! config('frame-generator.background_removal.enabled')) {
+            return null;
+        }
+
+        $pythonBin = (string) config('frame-generator.background_removal.python_bin');
+        $scriptPath = (string) config('frame-generator.background_removal.script_path');
+        $timeout = (int) config('frame-generator.background_removal.timeout_seconds', 60);
+
+        if (! is_file($scriptPath)) {
+            return null;
+        }
+
+        $inputAbsolutePath = Storage::disk('local')->path($uploadPath);
+        $outputRelativePath = 'tmp/processed/'.Str::uuid().'.png';
+        $outputAbsolutePath = Storage::disk('local')->path($outputRelativePath);
+        Storage::disk('local')->makeDirectory(dirname($outputRelativePath));
+
+        $process = new Process([
+            $pythonBin,
+            $scriptPath,
+            $inputAbsolutePath,
+            $outputAbsolutePath,
+        ]);
+        $process->setTimeout($timeout);
+
+        try {
+            $process->mustRun();
+
+            if (Storage::disk('local')->exists($outputRelativePath)) {
+                return $outputRelativePath;
+            }
+        } catch (Throwable $throwable) {
+            Log::warning('Background removal failed, falling back to original photo', [
+                'error' => $throwable->getMessage(),
+            ]);
+        }
+
+        Storage::disk('local')->delete($outputRelativePath);
+
+        return null;
     }
 
     private function createImageResource(string $path): \GdImage
